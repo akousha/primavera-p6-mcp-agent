@@ -1,0 +1,100 @@
+# PrimaveraP6 MCP Agent - Docker Compose
+# Complete development and production setup
+
+version: '3.8'
+
+services:
+  # ==============================
+  # MCP Agent Service
+  # ==============================
+  primavera-mcp-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: primavera-mcp-agent
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8080
+      SESSION_STORE_FILE: /app/data/session_store.json
+      TOOL_SERVER_BASE_URL: ${TOOL_SERVER_BASE_URL:-http://localhost:8080}
+    volumes:
+      # Persist session data
+      - ./data:/app/data
+      # Mount logs directory (optional)
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - primavera-network
+
+  # ==============================
+  # Development Service (Optional)
+  # ==============================
+  primavera-mcp-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: primavera-mcp-dev
+    ports:
+      - "8081:8080"
+    env_file:
+      - .env
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8080
+      P6_VERIFY_SSL: "false"
+      AUTO_SESSION_ENABLED: "true"
+      AUTO_SESSION_STRICT_MODE: "false"
+      LOG_LEVEL: DEBUG
+      ENABLE_SESSION_LOGGING: "true"
+      SESSION_STORE_FILE: /app/data/session_store.json
+      TOOL_SERVER_BASE_URL: http://localhost:8081
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Mount source code for development
+      - .:/app
+    command: ["uvicorn", "p6_mcp_phase3_2:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+    profiles:
+      - dev
+    networks:
+      - primavera-network
+
+  # ==============================
+  # Nginx Reverse Proxy (Optional)
+  # ==============================
+  nginx:
+    image: nginx:alpine
+    container_name: primavera-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - primavera-mcp-agent
+    profiles:
+      - nginx
+    networks:
+      - primavera-network
+
+networks:
+  primavera-network:
+    driver: bridge
+
+volumes:
+  # Named volumes for persistent data
+  session-data:
+    driver: local
+  logs-data:
+    driver: local

@@ -1,0 +1,11 @@
+# Python bytecode cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Local environment / secrets
+PrimaveraP6_MCP_Agent/PrimaveraP6_MCP_Agent/.env
+PrimaveraP6_MCP_Agent/session_store.json
+
+# Tooling artifacts (optional: comment out if you prefer to track them)
+.vscode/
