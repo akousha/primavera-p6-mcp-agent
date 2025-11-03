@@ -47,6 +47,9 @@ DEFAULT_ALLOWED_HOST = (P6_BASE_URL.split("//", 1)[-1]).split("/", 1)[0]
 ALLOWED_HOST = os.getenv("ALLOWED_HOST", DEFAULT_ALLOWED_HOST)
 
 CORS_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()]
+# For MCP compatibility, default to wildcard if no specific origins are set
+if not CORS_ORIGINS:
+    CORS_ORIGINS = ["*"]
 
 if not logging.getLogger().handlers:
     logging.basicConfig(level=LOG_LEVEL)
@@ -236,14 +239,17 @@ app = FastAPI(
 )
 
 if CORS_ORIGINS:
+    # Use allow_credentials=False with wildcard origins for security
+    # (auth uses session_id in body, not cookies)
+    allow_creds = False if "*" in CORS_ORIGINS else True
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
-        allow_credentials=True,
+        allow_credentials=allow_creds,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    logger.info("CORS enabled for origins: %s", ", ".join(CORS_ORIGINS))
+    logger.info("CORS enabled for origins: %s (credentials: %s)", ", ".join(CORS_ORIGINS), allow_creds)
 
 logger.info("Allowed upstream host: %s", ALLOWED_HOST)
 
@@ -763,4 +769,84 @@ def tool_schema():
     if not ENABLE_TOOL_SCHEMA:
         raise HTTPException(status_code=404, detail="Tool schema disabled")
     return _build_tool_schema()
+
+
+@app.get("/.well-known/mcp.json")
+def mcp_manifest():
+    """
+    MCP manifest endpoint for ChatGPT integration.
+    This must be served at /.well-known/mcp.json for ChatGPT to discover the service.
+    """
+    return {
+        "name": "primavera-p6-mcp-agent",
+        "description": "Oracle Primavera P6 MCP Agent - REST API bridge for ChatGPT",
+        "version": "0.3.2",
+        "tools": [
+            {
+                "name": "p6_login",
+                "description": "Login to Oracle P6 and start a session. Set remember=true to enable auto-relogin.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "username": {"type": "string"},
+                        "password": {"type": "string"},
+                        "databaseName": {"type": "string"},
+                        "remember": {"type": "boolean", "default": False}
+                    },
+                    "required": ["username", "password", "databaseName"]
+                }
+            },
+            {
+                "name": "p6_session_active",
+                "description": "Return the latest active session (session_id).",
+                "inputSchema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": "p6_obs_find",
+                "description": "Fuzzy search OBS by name (LIKE %q%).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string"},
+                        "q": {"type": "string"},
+                        "fields": {"type": "string", "default": "CreateDate,CreateUser,Description,GUID,LastUpdateDate,LastUpdateUser,Name,ObjectId,ParentObjectId,SequenceNumber"},
+                        "order_by": {"type": "string", "default": "Name"},
+                        "limit": {"type": "integer", "default": 50}
+                    },
+                    "required": ["q"]
+                }
+            },
+            {
+                "name": "p6_projects_by_obs",
+                "description": "List projects that belong to a given OBS (by name or id).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string"},
+                        "obs_name": {"type": "string"},
+                        "obs_id": {"type": "string"},
+                        "fields": {"type": "string", "default": "Id,Code,Name,StartDate,FinishDate,GUID,Status,OBSObjectId"},
+                        "order_by": {"type": "string", "default": "Name"},
+                        "limit": {"type": "integer", "default": 100}
+                    }
+                }
+            },
+            {
+                "name": "p6_call",
+                "description": "Generic proxy call to P6 REST via MCP. Auto-relogin if remember=true was used at login.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string"},
+                        "method": {"type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
+                        "path": {"type": "string"},
+                        "query": {"type": "object"},
+                        "headers": {"type": "object"},
+                        "body": {}
+                    },
+                    "required": ["session_id", "method", "path"]
+                }
+            }
+        ]
+    }
 
