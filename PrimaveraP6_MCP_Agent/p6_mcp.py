@@ -89,7 +89,7 @@ app = FastAPI(title="P6 MCP Server", version="0.3.0 (Phase 3)")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins for MCP compatibility
-    allow_credentials=True,
+    allow_credentials=False,  # No cookies/credentials needed (uses session_id in body)
     allow_methods=["*"],
     allow_headers=["*"],
 )
