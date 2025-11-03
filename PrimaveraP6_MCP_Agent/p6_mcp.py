@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 import requests
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # ==============================
@@ -83,6 +84,15 @@ class ProxyResponse(BaseModel):
 # FASTAPI APP
 # ==============================
 app = FastAPI(title="P6 MCP Server", version="0.3.0 (Phase 3)")
+
+# Add CORS middleware to allow ChatGPT and other clients to access the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for MCP compatibility
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ------------------------------
@@ -517,3 +527,83 @@ TOOL_SCHEMA_JSON = r'''{
 @app.get("/tool_schema.json")
 def tool_schema():
     return json.loads(TOOL_SCHEMA_JSON)
+
+
+@app.get("/.well-known/mcp.json")
+def mcp_manifest():
+    """
+    MCP manifest endpoint for ChatGPT integration.
+    This must be served at /.well-known/mcp.json for ChatGPT to discover the service.
+    """
+    return {
+        "name": "primavera-p6-mcp-agent",
+        "description": "Oracle Primavera P6 MCP Agent - REST API bridge for ChatGPT",
+        "version": "0.3.0",
+        "tools": [
+            {
+                "name": "p6_login",
+                "description": "Login to Oracle P6 and start a session. Set remember=true to enable auto-relogin.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "username": {"type": "string"},
+                        "password": {"type": "string"},
+                        "databaseName": {"type": "string"},
+                        "remember": {"type": "boolean", "default": False}
+                    },
+                    "required": ["username", "password", "databaseName"]
+                }
+            },
+            {
+                "name": "p6_session_active",
+                "description": "Return the latest active session (session_id).",
+                "inputSchema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": "p6_obs_find",
+                "description": "Fuzzy search OBS by name (LIKE %q%).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string"},
+                        "q": {"type": "string"},
+                        "fields": {"type": "string", "default": "CreateDate,CreateUser,Description,GUID,LastUpdateDate,LastUpdateUser,Name,ObjectId,ParentObjectId,SequenceNumber"},
+                        "order_by": {"type": "string", "default": "Name"},
+                        "limit": {"type": "integer", "default": 50}
+                    },
+                    "required": ["q"]
+                }
+            },
+            {
+                "name": "p6_projects_by_obs",
+                "description": "List projects that belong to a given OBS (by name or id).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string"},
+                        "obs_name": {"type": "string"},
+                        "obs_id": {"type": "string"},
+                        "fields": {"type": "string", "default": "Id,Code,Name,StartDate,FinishDate,GUID,Status,OBSObjectId"},
+                        "order_by": {"type": "string", "default": "Name"},
+                        "limit": {"type": "integer", "default": 100}
+                    }
+                }
+            },
+            {
+                "name": "p6_call",
+                "description": "Generic proxy call to P6 REST via MCP. Auto-relogin if remember=true was used at login.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string"},
+                        "method": {"type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
+                        "path": {"type": "string"},
+                        "query": {"type": "object"},
+                        "headers": {"type": "object"},
+                        "body": {}
+                    },
+                    "required": ["session_id", "method", "path"]
+                }
+            }
+        ]
+    }
