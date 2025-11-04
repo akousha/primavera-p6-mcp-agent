@@ -2,10 +2,45 @@
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
 
 # Local environment / secrets
+.env
+.env.local
+PrimaveraP6_MCP_Agent/.env
 PrimaveraP6_MCP_Agent/PrimaveraP6_MCP_Agent/.env
+session_store.json
 PrimaveraP6_MCP_Agent/session_store.json
 
-# Tooling artifacts (optional: comment out if you prefer to track them)
+# IDE and editor files
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
