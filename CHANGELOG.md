@@ -5,7 +5,7 @@ All notable changes to the Primavera P6 MCP Agent will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.2] - 2025-11-03
+## [0.3.2] - 2024-11-03
 
 ### Added
 - MCP manifest endpoint at `/.well-known/mcp.json` for ChatGPT integration
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable SSL verification for production/development
 - Session-based authentication with lifecycle logging
 
-## [0.3.1] - 2025-10-24
+## [0.3.1] - 2024-10-24
 
 ### Added
 - Advanced session management with JSON persistence
@@ -43,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced configuration via environment variables
 - Improved error handling and retry logic
 
-## [0.3.0] - 2025-10-24
+## [0.3.0] - 2024-10-24
 
 ### Added
 - Auto-session mode with automatic session ID injection
@@ -58,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved logging configuration
 - Enhanced security features
 
-## [0.2.0] - 2025-10-24
+## [0.2.0] - 2024-10-24
 
 ### Added
 - Generic `/call` endpoint for P6 API proxy
@@ -70,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved error handling
 - Enhanced request timeout handling
 
-## [0.1.0] - 2025-10-24
+## [0.1.0] - 2024-10-24
 
 ### Added
 - Initial release

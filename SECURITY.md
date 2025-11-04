@@ -94,7 +94,7 @@ Session logging (`ENABLE_SESSION_LOGGING=true`) includes:
 We take security vulnerabilities seriously. If you discover a security issue:
 
 1. **DO NOT** open a public GitHub issue
-2. Email the maintainers at: [security contact needed]
+2. Create a private security advisory on GitHub or email the repository owner
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce
@@ -204,5 +204,5 @@ Planned security improvements:
 
 ---
 
-**Last Updated**: 2025-11-04  
+**Last Updated**: 2024-11-04  
 **Version**: 0.3.2
