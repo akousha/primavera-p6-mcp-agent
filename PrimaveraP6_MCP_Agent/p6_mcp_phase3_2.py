@@ -833,9 +833,23 @@ def mcp_manifest_options():
         status_code=200,
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
             "Access-Control-Max-Age": "3600"
+        }
+    )
+
+
+@app.head("/.well-known/mcp.json")
+def mcp_manifest_head():
+    """Handle HEAD requests for MCP manifest (for connectivity checks)"""
+    from fastapi import Response
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=3600"
         }
     )
 
