@@ -418,16 +418,17 @@ def mcp_manifest_data():
     """Generate the MCP manifest data"""
     base_url = TOOL_SERVER_BASE_URL.rstrip("/")
     return {
-        "mcpVersion": "2024-11-05",
+        "schema_version": "v1.0",
         "name": "primavera-p6-mcp-agent",
         "description": "Oracle Primavera P6 MCP Agent - REST API bridge for ChatGPT",
         "version": "0.3.2",
         "author": "Metrolinx P6 Team",
         "license": "MIT",
+        "homepage": base_url,
         "capabilities": {
-            "tools": {},
-            "resources": {},
-            "prompts": {}
+            "tools": True,
+            "resources": False,
+            "prompts": False
         },
         "tools": [
             {
@@ -441,8 +442,7 @@ def mcp_manifest_data():
                         "databaseName": {"type": "string", "description": "P6 database name"},
                         "remember": {"type": "boolean", "description": "Enable auto-relogin on session expiry", "default": False}
                     },
-                    "required": ["username", "password", "databaseName"],
-                    "additionalProperties": False
+                    "required": ["username", "password", "databaseName"]
                 }
             },
             {
@@ -450,8 +450,7 @@ def mcp_manifest_data():
                 "description": "Return the latest active session information.",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {},
-                    "additionalProperties": False
+                    "properties": {}
                 }
             },
             {
@@ -466,8 +465,7 @@ def mcp_manifest_data():
                         "order_by": {"type": "string", "description": "Field to order results by", "default": "Name"},
                         "limit": {"type": "integer", "description": "Maximum number of results", "default": 50, "minimum": 1, "maximum": 1000}
                     },
-                    "required": ["q"],
-                    "additionalProperties": False
+                    "required": ["q"]
                 }
             },
             {
@@ -482,8 +480,7 @@ def mcp_manifest_data():
                         "fields": {"type": "string", "description": "Comma-separated list of fields to return", "default": "Id,Code,Name,StartDate,FinishDate,GUID,Status,OBSObjectId"},
                         "order_by": {"type": "string", "description": "Field to order results by", "default": "Name"},
                         "limit": {"type": "integer", "description": "Maximum number of results", "default": 100, "minimum": 1, "maximum": 1000}
-                    },
-                    "additionalProperties": False
+                    }
                 }
             },
             {
@@ -499,17 +496,14 @@ def mcp_manifest_data():
                         "headers": {"type": "object", "description": "Additional HTTP headers"},
                         "body": {"description": "Request body for POST/PUT/PATCH requests"}
                     },
-                    "required": ["method", "path"],
-                    "additionalProperties": False
+                    "required": ["method", "path"]
                 }
             }
         ],
-        "servers": [
-            {
-                "url": base_url,
-                "description": "Primavera P6 MCP Agent Production Server"
-            }
-        ]
+        "server": {
+            "url": base_url,
+            "description": "Primavera P6 MCP Agent Production Server"
+        }
     }
 
 
