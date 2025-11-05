@@ -41,7 +41,7 @@ MCP_API_KEY = os.getenv("MCP_API_KEY")
 MCP_API_KEY_HEADER = os.getenv("MCP_API_KEY_HEADER", "x-api-key")
 
 ENABLE_TOOL_SCHEMA = env_bool("ENABLE_TOOL_SCHEMA", "true")
-TOOL_SERVER_BASE_URL = os.getenv("TOOL_SERVER_BASE_URL", "http://127.0.0.1:8080")
+TOOL_SERVER_BASE_URL = os.getenv("TOOL_SERVER_BASE_URL", "https://primavera-p6-mcp-agent-production.up.railway.app")
 
 DEFAULT_ALLOWED_HOST = (P6_BASE_URL.split("//", 1)[-1]).split("/", 1)[0]
 ALLOWED_HOST = os.getenv("ALLOWED_HOST", DEFAULT_ALLOWED_HOST)
@@ -407,16 +407,70 @@ def _json_or_text(resp: requests.Response):
 # ------------------------------
 # Endpoints
 # ------------------------------
+@app.get("/")
+def root():
+    """Root endpoint with basic info and MCP discovery"""
+    from fastapi import Response
+    import json
+    
+    root_data = {
+        "name": "Primavera P6 MCP Agent",
+        "version": "0.3.2",
+        "description": "Oracle Primavera P6 MCP Agent - REST API bridge for ChatGPT",
+        "status": "online",
+        "mcp_manifest": "/.well-known/mcp.json",
+        "health_check": "/health",
+        "documentation": "/docs",
+        "auto_session_enabled": AUTO_SESSION_ENABLED
+    }
+    
+    return Response(
+        content=json.dumps(root_data, indent=2),
+        media_type="application/json",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=300"
+        }
+    )
+
+
 @app.get("/health")
 def health():
-    return {
+    """Enhanced health check with MCP readiness status"""
+    from fastapi import Response
+    import json
+    
+    health_data = {
         "ok": True,
+        "status": "healthy",
         "time": int(time.time()),
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
         "base": P6_BASE_URL,
         "auto_session_enabled": AUTO_SESSION_ENABLED,
         "auto_session_strict_mode": AUTO_SESSION_STRICT_MODE,
-        "sessions": session_manager.list_sessions()
+        "mcp_ready": True,
+        "version": "0.3.2",
+        "sessions": session_manager.list_sessions(),
+        "endpoints": {
+            "mcp_manifest": "/.well-known/mcp.json",
+            "tool_schema": "/tool_schema.json",
+            "login": "/login",
+            "call": "/call",
+            "obs_find": "/obs/find",
+            "projects_by_obs": "/projects/by_obs"
+        }
     }
+    
+    return Response(
+        content=json.dumps(health_data, indent=2),
+        media_type="application/json",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 
 @app.post("/login", response_model=LoginResponse)
@@ -771,16 +825,42 @@ def tool_schema():
     return _build_tool_schema()
 
 
+@app.options("/.well-known/mcp.json")
+def mcp_manifest_options():
+    """Handle preflight requests for MCP manifest"""
+    from fastapi import Response
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
+
+
 @app.get("/.well-known/mcp.json")
-def mcp_manifest():
+def mcp_manifest(request: Request):
     """
     MCP manifest endpoint for ChatGPT integration.
     This must be served at /.well-known/mcp.json for ChatGPT to discover the service.
     """
-    return {
+    base_url = TOOL_SERVER_BASE_URL.rstrip("/")
+    
+    # Build the manifest
+    manifest = {
+        "mcpVersion": "2024-11-05",
         "name": "primavera-p6-mcp-agent",
         "description": "Oracle Primavera P6 MCP Agent - REST API bridge for ChatGPT",
         "version": "0.3.2",
+        "author": "Metrolinx P6 Team",
+        "license": "MIT",
+        "capabilities": {
+            "tools": {},
+            "resources": {},
+            "prompts": {}
+        },
         "tools": [
             {
                 "name": "p6_login",
@@ -788,65 +868,97 @@ def mcp_manifest():
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "username": {"type": "string"},
-                        "password": {"type": "string"},
-                        "databaseName": {"type": "string"},
-                        "remember": {"type": "boolean", "default": False}
+                        "username": {"type": "string", "description": "P6 username"},
+                        "password": {"type": "string", "description": "P6 password"},
+                        "databaseName": {"type": "string", "description": "P6 database name"},
+                        "remember": {"type": "boolean", "description": "Enable auto-relogin on session expiry", "default": False}
                     },
-                    "required": ["username", "password", "databaseName"]
+                    "required": ["username", "password", "databaseName"],
+                    "additionalProperties": False
                 }
             },
             {
                 "name": "p6_session_active",
-                "description": "Return the latest active session (session_id).",
-                "inputSchema": {"type": "object", "properties": {}}
+                "description": "Return the latest active session information.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False
+                }
             },
             {
                 "name": "p6_obs_find",
-                "description": "Fuzzy search OBS by name (LIKE %q%).",
+                "description": "Fuzzy search OBS (Organizational Breakdown Structure) by name. Auto-session enabled.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "session_id": {"type": "string"},
-                        "q": {"type": "string"},
-                        "fields": {"type": "string", "default": "CreateDate,CreateUser,Description,GUID,LastUpdateDate,LastUpdateUser,Name,ObjectId,ParentObjectId,SequenceNumber"},
-                        "order_by": {"type": "string", "default": "Name"},
-                        "limit": {"type": "integer", "default": 50}
+                        "session_id": {"type": "string", "description": "Optional session ID (auto-injected if not provided)"},
+                        "q": {"type": "string", "description": "Search query for OBS name"},
+                        "fields": {"type": "string", "description": "Comma-separated list of fields to return", "default": "CreateDate,CreateUser,Description,GUID,LastUpdateDate,LastUpdateUser,Name,ObjectId,ParentObjectId,SequenceNumber"},
+                        "order_by": {"type": "string", "description": "Field to order results by", "default": "Name"},
+                        "limit": {"type": "integer", "description": "Maximum number of results", "default": 50, "minimum": 1, "maximum": 1000}
                     },
-                    "required": ["q"]
+                    "required": ["q"],
+                    "additionalProperties": False
                 }
             },
             {
                 "name": "p6_projects_by_obs",
-                "description": "List projects that belong to a given OBS (by name or id).",
+                "description": "List projects that belong to a given OBS (by name or id). Auto-session enabled.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "session_id": {"type": "string"},
-                        "obs_name": {"type": "string"},
-                        "obs_id": {"type": "string"},
-                        "fields": {"type": "string", "default": "Id,Code,Name,StartDate,FinishDate,GUID,Status,OBSObjectId"},
-                        "order_by": {"type": "string", "default": "Name"},
-                        "limit": {"type": "integer", "default": 100}
-                    }
+                        "session_id": {"type": "string", "description": "Optional session ID (auto-injected if not provided)"},
+                        "obs_name": {"type": "string", "description": "Exact OBS name to search for"},
+                        "obs_id": {"type": "string", "description": "OBS Object ID (alternative to obs_name)"},
+                        "fields": {"type": "string", "description": "Comma-separated list of fields to return", "default": "Id,Code,Name,StartDate,FinishDate,GUID,Status,OBSObjectId"},
+                        "order_by": {"type": "string", "description": "Field to order results by", "default": "Name"},
+                        "limit": {"type": "integer", "description": "Maximum number of results", "default": 100, "minimum": 1, "maximum": 1000}
+                    },
+                    "additionalProperties": False
                 }
             },
             {
                 "name": "p6_call",
-                "description": "Generic proxy call to P6 REST via MCP. Auto-relogin if remember=true was used at login.",
+                "description": "Generic proxy call to P6 REST API via MCP. Auto-relogin if remember=true was used at login. Auto-session enabled.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "session_id": {"type": "string"},
-                        "method": {"type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
-                        "path": {"type": "string"},
-                        "query": {"type": "object"},
-                        "headers": {"type": "object"},
-                        "body": {}
+                        "session_id": {"type": "string", "description": "Optional session ID (auto-injected if not provided)"},
+                        "method": {"type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"], "description": "HTTP method"},
+                        "path": {"type": "string", "description": "API path (e.g., '/projects', '/obs')"},
+                        "query": {"type": "object", "description": "Query parameters as key-value pairs"},
+                        "headers": {"type": "object", "description": "Additional HTTP headers"},
+                        "body": {"description": "Request body for POST/PUT/PATCH requests"}
                     },
-                    "required": ["session_id", "method", "path"]
+                    "required": ["method", "path"],
+                    "additionalProperties": False
                 }
+            }
+        ],
+        "servers": [
+            {
+                "url": base_url,
+                "description": "Primavera P6 MCP Agent Production Server"
             }
         ]
     }
+    
+    # Create response with proper headers for ChatGPT access
+    from fastapi import Response
+    import json
+    
+    response = Response(
+        content=json.dumps(manifest, indent=2),
+        media_type="application/json",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Cache-Control": "public, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"
+        }
+    )
+    return response
 
