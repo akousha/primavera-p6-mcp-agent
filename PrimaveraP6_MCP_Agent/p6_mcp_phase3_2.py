@@ -434,6 +434,35 @@ def root():
     )
 
 
+@app.get("/mcp.json")
+def mcp_json_redirect():
+    """Redirect /mcp.json to the proper MCP manifest location"""
+    from fastapi import RedirectResponse
+    return RedirectResponse(url="/.well-known/mcp.json", status_code=301)
+
+
+@app.get("/.well-known/oauth-authorization-server")
+@app.get("/.well-known/openid-configuration")
+def oauth_not_supported():
+    """Handle OAuth discovery requests - return that auth is not required"""
+    from fastapi import Response
+    import json
+    
+    return Response(
+        content=json.dumps({
+            "error": "authentication_not_required",
+            "message": "This MCP server does not require authentication",
+            "mcp_manifest": "/.well-known/mcp.json"
+        }),
+        status_code=200,
+        media_type="application/json",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache"
+        }
+    )
+
+
 @app.get("/health")
 def health():
     """Enhanced health check with MCP readiness status"""
