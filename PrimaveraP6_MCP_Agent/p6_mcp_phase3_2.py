@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI, HTTPException, Query, Request, Depends
+from fastapi import FastAPI, HTTPException, Query, Request, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -89,6 +89,12 @@ def require_api_key(request: Request):
 api_dependencies: List[Any] = []
 if MCP_API_KEY:
     api_dependencies.append(Depends(require_api_key))
+
+router_kwargs: Dict[str, Any] = {}
+if api_dependencies:
+    router_kwargs["dependencies"] = api_dependencies
+
+api_router = APIRouter(**router_kwargs)
 
 
 # ==============================
@@ -234,8 +240,7 @@ class ProxyResponse(BaseModel):
 # ==============================
 app = FastAPI(
     title="P6 MCP Server",
-    version="0.3.2 (Phase 3.2 - Auto Session)",
-    dependencies=api_dependencies,
+    version="0.3.2 (Phase 3.2 - Auto Session)"
 )
 
 if CORS_ORIGINS:
@@ -495,7 +500,7 @@ def oauth_not_supported():
     )
 
 
-@app.get("/health")
+@api_router.get("/health")
 def health():
     """Enhanced health check with MCP readiness status"""
     from fastapi import Response
@@ -534,7 +539,7 @@ def health():
     )
 
 
-@app.post("/login", response_model=LoginResponse)
+@api_router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest):
     cookies, auth_token = _try_login(req.username, req.password, req.databaseName)
     ses_id = _mk_session_id()
@@ -548,7 +553,7 @@ def login(req: LoginRequest):
     return LoginResponse(session_id=ses_id, cookies=cookies, authToken=auth_token, remember=req.remember)
 
 
-@app.post("/call", response_model=ProxyResponse)
+@api_router.post("/call", response_model=ProxyResponse)
 def call(req: CallRequest):
     # Phase 3.2: Auto-inject session if not provided
     ses_id = _get_session_id_or_latest(req.session_id)
@@ -586,7 +591,7 @@ def call(req: CallRequest):
 # ------------------------------
 # Helper: OBS by name (exact match)
 # ------------------------------
-@app.get("/obs/byName", response_model=ProxyResponse)
+@api_router.get("/obs/byName", response_model=ProxyResponse)
 def obs_by_name(session_id: Optional[str] = Query(None, description="session_id from /login (optional if auto-session enabled)"),
                 name: str = Query(..., description="Exact OBS Name"),
                 fields: str = Query("CreateDate,CreateUser,Description,GUID,LastUpdateDate,LastUpdateUser,Name,ObjectId,ParentObjectId,SequenceNumber"),
@@ -614,7 +619,7 @@ def obs_by_name(session_id: Optional[str] = Query(None, description="session_id 
 # ------------------------------
 # Helper: Projects list
 # ------------------------------
-@app.get("/projects/list", response_model=ProxyResponse)
+@api_router.get("/projects/list", response_model=ProxyResponse)
 def projects_list(session_id: Optional[str] = Query(None, description="session_id (optional if auto-session enabled)"),
                   filter: Optional[str] = Query(None, description="P6 Filter expression"),
                   fields: str = Query("Id,Code,Name,StartDate,FinishDate,GUID,Status"),
@@ -647,7 +652,7 @@ def projects_list(session_id: Optional[str] = Query(None, description="session_i
 # ------------------------------
 # Phase 3: Return only the latest session
 # ------------------------------
-@app.get("/session/active")
+@api_router.get("/session/active")
 def session_active():
     latest = session_manager.get_latest_session()
     if not latest:
@@ -664,7 +669,7 @@ def session_active():
 # ------------------------------
 # Phase 3.2: Session management endpoints
 # ------------------------------
-@app.delete("/session/{session_id}")
+@api_router.delete("/session/{session_id}")
 def delete_session(session_id: str):
     """Delete a specific session"""
     if session_id not in session_manager.sessions:
@@ -673,7 +678,7 @@ def delete_session(session_id: str):
     return {"message": f"Session {session_id} deleted"}
 
 
-@app.delete("/sessions/clear")
+@api_router.delete("/sessions/clear")
 def clear_all_sessions():
     """Clear all sessions"""
     session_manager.clear_all()
@@ -683,7 +688,7 @@ def clear_all_sessions():
 # ------------------------------
 # Phase 3: OBS fuzzy find (Name LIKE %q%)
 # ------------------------------
-@app.get("/obs/find", response_model=ProxyResponse)
+@api_router.get("/obs/find", response_model=ProxyResponse)
 def obs_find(
     session_id: Optional[str] = Query(None, description="session_id (optional if auto-session enabled)"),
     q: str = Query(..., description="Substring to search in OBS Name"),
@@ -715,7 +720,7 @@ def obs_find(
 # ------------------------------
 # Phase 3: Projects by OBS (by name or id)
 # ------------------------------
-@app.get("/projects/by_obs", response_model=ProxyResponse)
+@api_router.get("/projects/by_obs", response_model=ProxyResponse)
 def projects_by_obs(
     session_id: Optional[str] = Query(None, description="session_id (optional if auto-session enabled)"),
     obs_name: Optional[str] = Query(None, description="Exact OBS Name to resolve to ObjectId"),
@@ -879,11 +884,14 @@ def _build_tool_schema() -> Dict[str, Any]:
     }
 
 
-@app.get("/tool_schema.json")
+@api_router.get("/tool_schema.json")
 def tool_schema():
     if not ENABLE_TOOL_SCHEMA:
         raise HTTPException(status_code=404, detail="Tool schema disabled")
     return _build_tool_schema()
+
+
+app.include_router(api_router)
 
 
 @app.options("/.well-known/mcp.json")
@@ -941,33 +949,4 @@ def mcp_manifest(request: Request):
         }
     )
     return response
-
-
-@app.options("/.well-known/mcp.json")
-def mcp_manifest_options():
-    """Handle preflight requests for MCP manifest"""
-    from fastapi import Response
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Access-Control-Max-Age": "3600"
-        }
-    )
-
-
-@app.head("/.well-known/mcp.json")
-def mcp_manifest_head():
-    """Handle HEAD requests for MCP manifest (for connectivity checks)"""
-    from fastapi import Response
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "application/json",
-            "Cache-Control": "public, max-age=3600"
-        }
-    )
 
