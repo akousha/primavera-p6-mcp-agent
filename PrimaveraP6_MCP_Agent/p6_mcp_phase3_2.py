@@ -412,11 +412,33 @@ def _json_or_text(resp: requests.Response):
 # ------------------------------
 # Endpoints
 # ------------------------------
+MANIFEST_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Cache-Control": "public, max-age=3600",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+}
+
+
+def _manifest_response(manifest: Dict[str, Any]):
+    """Return a JSON response for the manifest with the shared headers."""
+    from fastapi import Response
+    import json
+
+    return Response(
+        content=json.dumps(manifest, indent=2),
+        media_type="application/json",
+        headers=MANIFEST_HEADERS.copy(),
+    )
+
+
 @app.get("/")
 def root():
     """Root endpoint returns MCP manifest for ChatGPT integration"""
     # Return the same manifest as /.well-known/mcp.json for base domain compatibility
-    return mcp_manifest_data()
+    return _manifest_response(mcp_manifest_data())
 
 
 def mcp_manifest_data():
@@ -898,29 +920,17 @@ app.include_router(api_router)
 def mcp_manifest_options():
     """Handle preflight requests for MCP manifest"""
     from fastapi import Response
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Access-Control-Max-Age": "3600"
-        }
-    )
+    headers = MANIFEST_HEADERS.copy()
+    headers["Access-Control-Max-Age"] = "3600"
+    return Response(status_code=200, headers=headers)
 
 
 @app.head("/.well-known/mcp.json")
 def mcp_manifest_head():
     """Handle HEAD requests for MCP manifest (for connectivity checks)"""
     from fastapi import Response
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "application/json",
-            "Cache-Control": "public, max-age=3600"
-        }
-    )
+    headers = MANIFEST_HEADERS.copy()
+    return Response(status_code=200, headers=headers)
 
 
 @app.get("/.well-known/mcp.json")
@@ -933,20 +943,5 @@ def mcp_manifest(request: Request):
     manifest = mcp_manifest_data()
     
     # Create response with proper headers for ChatGPT access
-    from fastapi import Response
-    import json
-    
-    response = Response(
-        content=json.dumps(manifest, indent=2),
-        media_type="application/json",
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Cache-Control": "public, max-age=3600",
-            "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"
-        }
-    )
-    return response
+    return _manifest_response(manifest)
 
